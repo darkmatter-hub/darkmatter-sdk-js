@@ -1,7 +1,13 @@
 /**
- * DarkMatter JavaScript SDK
+ * DarkMatter JavaScript SDK v1.4.0
  * Replay, fork, and verify any AI workflow.
  * npm install darkmatter-js
+ *
+ * Changelog v1.4.0
+ * - dmOpenAIClient now instruments openai.responses.create() in addition to
+ *   openai.chat.completions.create()
+ * - DarkMatterTracer.invoke() now commits the full graph run as a parent record
+ * - Added configure() module-level helper
  */
 
 const BASE = 'https://darkmatterhub.ai';
@@ -126,6 +132,14 @@ async function me() {
   return _req('GET', '/api/me');
 }
 
+/**
+ * Module-level configure helper — sets DARKMATTER_API_KEY in process.env.
+ * @param {object} opts - { apiKey }
+ */
+function configure(opts = {}) {
+  if (opts.apiKey) process.env.DARKMATTER_API_KEY = opts.apiKey;
+}
+
 // ── Class interface ───────────────────────────────────────────────────────────
 
 class DarkMatter {
@@ -186,6 +200,8 @@ class DarkMatterTracer {
   async invoke(input, config = {}) {
     let parentId = null;
     const traceId = this._traceId || `trc_${Date.now()}`;
+    const t0      = Date.now();
+
     try {
       for await (const chunk of this._app.stream(input, config)) {
         for (const [nodeName, nodeOutput] of Object.entries(chunk)) {
@@ -205,7 +221,27 @@ class DarkMatterTracer {
     } catch (e) {
       console.warn('[DarkMatter] stream failed, falling back:', e.message);
     }
-    return this._app.invoke(input, config);
+
+    const result = await this._app.invoke(input, config);
+
+    // Commit the full graph run as a parent summary record
+    try {
+      await this._dm.commit(
+        this._toAgentId,
+        {
+          input:      typeof input === 'object' ? JSON.stringify(input).slice(0, 400) : String(input).slice(0, 400),
+          output:     typeof result === 'object' ? JSON.stringify(result).slice(0, 400) : String(result).slice(0, 400),
+          latency_ms: Date.now() - t0,
+          wrapper:    'langgraph',
+          event:      'graph_run',
+        },
+        { traceId, eventType: 'langgraph_graph', agent: { provider: 'langgraph' } }
+      );
+    } catch (e) {
+      console.warn('[DarkMatter] graph summary commit failed:', e.message);
+    }
+
+    return result;
   }
 
   stream(input, config) { return this._app.stream(input, config); }
@@ -252,26 +288,76 @@ function dmOpenAIClient(openaiClient, opts = {}) {
   const traceId   = opts.traceId;
   let lastCtxId   = null;
 
-  const originalCreate = openaiClient.chat.completions.create.bind(openaiClient.chat.completions);
+  // ── chat.completions.create ───────────────────────────────────────────────
+  const originalChatCreate = openaiClient.chat.completions.create.bind(openaiClient.chat.completions);
 
   openaiClient.chat.completions.create = async function(params) {
-    const response = await originalCreate(params);
-    const output = response.choices?.[0]?.message?.content || '';
+    const t0       = Date.now();
+    const response = await originalChatCreate(params);
+    const output   = response.choices?.[0]?.message?.content || '';
     try {
       const ctx = await dm.commit(
         toAgentId,
-        { input: params.messages, output,
-          memory: { model: params.model, finish_reason: response.choices?.[0]?.finish_reason,
-                    usage: response.usage } },
+        { input:  params.messages,
+          output,
+          memory: { model: params.model,
+                    finish_reason: response.choices?.[0]?.finish_reason,
+                    usage: response.usage,
+                    latency_ms: Date.now() - t0 } },
         { traceId, eventType: 'commit',
-          agent: { provider: 'openai', model: params.model } }
+          agent: { provider: 'openai', model: params.model, wrapper: 'openai_chat' } }
       );
       lastCtxId = ctx.id;
     } catch (e) {
-      console.warn('[DarkMatter] commit failed:', e.message);
+      console.warn('[DarkMatter] chat commit failed:', e.message);
     }
     return response;
   };
+
+  // ── responses.create (Responses API — openai >= 4.77.0) ──────────────────
+  if (openaiClient.responses && typeof openaiClient.responses.create === 'function') {
+    const originalResponsesCreate = openaiClient.responses.create.bind(openaiClient.responses);
+
+    openaiClient.responses.create = async function(params) {
+      const t0       = Date.now();
+      const response = await originalResponsesCreate(params);
+
+      // Extract output text from Responses API structure
+      let outputText = '';
+      try {
+        if (response.output_text) {
+          outputText = response.output_text;
+        } else if (Array.isArray(response.output)) {
+          for (const item of response.output) {
+            for (const block of item.content || []) {
+              if (block.type === 'output_text' || block.type === 'text') {
+                outputText += block.text || '';
+              }
+            }
+          }
+        }
+      } catch (_) {}
+
+      try {
+        const ctx = await dm.commit(
+          toAgentId,
+          { input:  typeof params.input === 'string'
+                      ? params.input.slice(0, 500)
+                      : JSON.stringify(params.input).slice(0, 500),
+            output: outputText.slice(0, 500),
+            memory: { model:      params.model,
+                      latency_ms: Date.now() - t0,
+                      usage:      response.usage } },
+          { traceId, eventType: 'commit',
+            agent: { provider: 'openai', model: params.model, wrapper: 'openai_responses' } }
+        );
+        lastCtxId = ctx.id;
+      } catch (e) {
+        console.warn('[DarkMatter] responses commit failed:', e.message);
+      }
+      return response;
+    };
+  }
 
   Object.defineProperty(openaiClient, 'lastCtxId', { get: () => lastCtxId });
   return openaiClient;
@@ -282,6 +368,7 @@ module.exports = {
   DarkMatterTracer,
   dmAnthropicClient,
   dmOpenAIClient,
+  configure,
   commit, pull, replay, fork, verify,
   export: exportChain,
   search, diff, me,
