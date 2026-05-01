@@ -1,6 +1,6 @@
 {
   "name": "darkmatter-js",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Replay, fork, and verify any AI workflow. Execution record for AI agent pipelines.",
   "main": "src/index.js",
   "exports": {

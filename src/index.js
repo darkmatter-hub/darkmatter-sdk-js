@@ -1,7 +1,10 @@
 /**
- * DarkMatter JavaScript SDK v1.4.0
+ * DarkMatter JavaScript SDK v1.4.1
  * Replay, fork, and verify any AI workflow.
  * npm install darkmatter-js
+ *
+ * Changelog v1.4.1
+ * - commit() toAgentId is now optional, defaults to DARKMATTER_AGENT_ID env var
  *
  * Changelog v1.4.0
  * - dmOpenAIClient now instruments openai.responses.create() in addition to
@@ -49,13 +52,14 @@ async function _req(method, path, body, key, base) {
 
 /**
  * Commit agent context to DarkMatter.
- * @param {string} toAgentId - Recipient agent ID
+ * @param {string} [toAgentId] - Recipient agent ID. Defaults to DARKMATTER_AGENT_ID env var.
  * @param {object} payload - { input, output, memory, variables }
  * @param {object} opts - { parentId, traceId, branchKey, eventType, agent }
  * @returns {Promise<object>} Context Passport
  */
 async function commit(toAgentId, payload, opts = {}) {
-  const body = { toAgentId, payload, eventType: opts.eventType || 'commit' };
+  const resolvedTo = toAgentId || process.env.DARKMATTER_AGENT_ID;
+  const body = { toAgentId: resolvedTo, payload, eventType: opts.eventType || 'commit' };
   if (opts.parentId)  body.parentId  = opts.parentId;
   if (opts.traceId)   body.traceId   = opts.traceId;
   if (opts.branchKey) body.branchKey = opts.branchKey;
@@ -156,7 +160,8 @@ class DarkMatter {
   }
 
   commit(toAgentId, payload, opts = {}) {
-    const body = { toAgentId, payload, eventType: opts.eventType || 'commit' };
+    const resolvedTo = toAgentId || process.env.DARKMATTER_AGENT_ID;
+    const body = { toAgentId: resolvedTo, payload, eventType: opts.eventType || 'commit' };
     if (opts.parentId)  body.parentId  = opts.parentId;
     if (opts.traceId)   body.traceId   = opts.traceId;
     if (opts.branchKey) body.branchKey = opts.branchKey;
