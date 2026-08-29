@@ -1,8 +1,15 @@
 /**
- * DarkMatter JavaScript SDK v1.4.1
+ * DarkMatter JavaScript SDK v1.4.2
  * Replay, fork, and verify any AI workflow.
  * npm install darkmatter-js
  *
+ * Changelog v1.4.2
+ * - commit() now computes payload_hash on the client with RFC 8785 canonical
+ *   JSON, matching the server and the Python SDK. Before this the SDK sent no
+ *   hash at all and the server computed one from what it received, so nothing
+ *   about the payload was established before it left the machine.
+ * - canonicalize() and hashPayload() exported so callers can recompute it
+
  * Changelog v1.4.1
  * - commit() toAgentId is now optional, defaults to DARKMATTER_AGENT_ID env var
  *
@@ -13,7 +20,94 @@
  * - Added configure() module-level helper
  */
 
+const crypto = require('node:crypto');
+
 const BASE = 'https://darkmatterhub.ai';
+
+/**
+ * RFC 8785 (JCS) canonical serialization.
+ *
+ * This has to agree byte for byte with canonicalize() in DarkMatter's
+ * src/integrity.js, because the server recomputes the hash from the payload it
+ * receives and rejects the commit if the two disagree. Until v1.4.2 this SDK
+ * computed nothing and let the server hash, which meant every claim about the
+ * payload being hashed before it left your machine was true of the Python SDK
+ * and false here.
+ *
+ * Two details are load-bearing:
+ *
+ *   Key order is by UTF-16 code unit, which is what Array.prototype.sort does
+ *   on strings. That is the same as code point order across the whole BMP and
+ *   differs above it, because an astral character is a surrogate pair: U+1F600
+ *   is D83D DE00, which sorts below U+FF01 in UTF-16 and above it by code
+ *   point. Python's sorted() gets this wrong; JavaScript is correct by default.
+ *
+ *   undefined is dropped, null is kept. JSON.stringify drops both, so a payload
+ *   with an explicit null would hash differently if this delegated to it.
+ */
+function canonicalize(value) {
+  if (value === null) return 'null';
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+
+  if (typeof value === 'number') {
+    if (!isFinite(value)) {
+      throw new TypeError('canonicalize: non-finite number rejected: ' + value);
+    }
+    if (Number.isInteger(value)) return String(value);
+    let s = value.toPrecision(17);
+    if (s.includes('.') && !s.includes('e')) {
+      s = s.replace(/\.?0+$/, '');
+      if (!s.includes('.')) s += '.0';
+    }
+    return s;
+  }
+
+  if (typeof value === 'string') return JSON.stringify(value);
+
+  if (Array.isArray(value)) {
+    return '[' + value.map(canonicalize).join(',') + ']';
+  }
+
+  if (typeof value === 'object') {
+    const keys  = Object.keys(value).sort();
+    const pairs = [];
+    for (const k of keys) {
+      const v = value[k];
+      if (v === undefined) continue;
+      pairs.push(JSON.stringify(k) + ':' + canonicalize(v));
+    }
+    return '{' + pairs.join(',') + '}';
+  }
+
+  throw new TypeError('canonicalize: unsupported type ' + typeof value);
+}
+
+/**
+ * SHA-256 of the canonical form. Lowercase hex, no prefix, matching
+ * hashPayload() on the server and hash_payload() in the Python SDK.
+ */
+function hashPayload(payload) {
+  return crypto.createHash('sha256').update(canonicalize(payload), 'utf8').digest('hex');
+}
+
+/**
+ * The commit body every caller sends. One builder, because the module-level
+ * commit() and DarkMatter#commit() had identical copies and a hash added to
+ * one of them would have been missing from the other.
+ */
+function buildCommitBody(resolvedTo, payload, opts) {
+  const body = {
+    toAgentId: resolvedTo,
+    payload,
+    eventType: opts.eventType || 'commit',
+    payload_hash: hashPayload(payload),
+  };
+  if (opts.parentId)  body.parentId  = opts.parentId;
+  if (opts.traceId)   body.traceId   = opts.traceId;
+  if (opts.branchKey) body.branchKey = opts.branchKey;
+  if (opts.agent)     body.agent     = opts.agent;
+  return body;
+}
 
 function getKey() {
   const key = process.env.DARKMATTER_API_KEY || '';
@@ -59,11 +153,7 @@ async function _req(method, path, body, key, base) {
  */
 async function commit(toAgentId, payload, opts = {}) {
   const resolvedTo = toAgentId || process.env.DARKMATTER_AGENT_ID;
-  const body = { toAgentId: resolvedTo, payload, eventType: opts.eventType || 'commit' };
-  if (opts.parentId)  body.parentId  = opts.parentId;
-  if (opts.traceId)   body.traceId   = opts.traceId;
-  if (opts.branchKey) body.branchKey = opts.branchKey;
-  if (opts.agent)     body.agent     = opts.agent;
+  const body = buildCommitBody(resolvedTo, payload, opts);
   return _req('POST', '/api/commit', body);
 }
 
@@ -161,12 +251,7 @@ class DarkMatter {
 
   commit(toAgentId, payload, opts = {}) {
     const resolvedTo = toAgentId || process.env.DARKMATTER_AGENT_ID;
-    const body = { toAgentId: resolvedTo, payload, eventType: opts.eventType || 'commit' };
-    if (opts.parentId)  body.parentId  = opts.parentId;
-    if (opts.traceId)   body.traceId   = opts.traceId;
-    if (opts.branchKey) body.branchKey = opts.branchKey;
-    if (opts.agent)     body.agent     = opts.agent;
-    return this._req('POST', '/api/commit', body);
+    return this._req('POST', '/api/commit', buildCommitBody(resolvedTo, payload, opts));
   }
 
   pull()                           { return this._req('GET', '/api/pull'); }
@@ -377,4 +462,7 @@ module.exports = {
   commit, pull, replay, fork, verify,
   export: exportChain,
   search, diff, me,
+  // Exported so a caller can recompute what we sent and check it themselves,
+  // and so the cross-implementation test can compare against the server.
+  canonicalize, hashPayload,
 };

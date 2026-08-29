@@ -1,6 +1,6 @@
 {
   "name": "darkmatter-js",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "Replay, fork, and verify any AI workflow. Execution record for AI agent pipelines.",
   "main": "src/index.js",
   "exports": {
@@ -13,15 +13,15 @@
     "ai", "agents", "llm", "execution", "record", "replay", "fork", "verify",
     "lineage", "audit", "anthropic", "openai", "langgraph", "context-passport"
   ],
-  "author": "Ben Gunvl <hello@darkmatterhub.ai>",
+  "author": "DarkMatter <hello@darkmatterhub.ai>",
   "license": "MIT",
   "homepage": "https://darkmatterhub.ai",
   "repository": {
     "type": "git",
-    "url": "https://github.com/bengunvl/darkmatter"
+    "url": "https://github.com/darkmatter-hub/darkmatter-sdk-js"
   },
   "bugs": {
-    "url": "https://github.com/bengunvl/darkmatter/issues"
+    "url": "https://github.com/darkmatter-hub/darkmatter-sdk-js/issues"
   },
   "engines": {
     "node": ">=18.0.0"

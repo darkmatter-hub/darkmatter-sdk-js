@@ -1,0 +1,99 @@
+[
+  {
+    "label": "ascii keys",
+    "payload": {
+      "role": "assistant",
+      "text": "hello"
+    },
+    "canonical": "{\"role\":\"assistant\",\"text\":\"hello\"}",
+    "hash": "4628da241400a7e42e04b10b9452bff44dc5e1e0439b0d2acceb1522972c8ce6"
+  },
+  {
+    "label": "nested and unsorted",
+    "payload": {
+      "b": 2,
+      "a": 1,
+      "c": {
+        "z": 1,
+        "y": [
+          3,
+          2,
+          1
+        ]
+      }
+    },
+    "canonical": "{\"a\":1,\"b\":2,\"c\":{\"y\":[3,2,1],\"z\":1}}",
+    "hash": "43a6253db23744e5139982e36556d087f17850ab43af40111ac5afd742bf07cc"
+  },
+  {
+    "label": "null kept",
+    "payload": {
+      "a": null,
+      "b": 1
+    },
+    "canonical": "{\"a\":null,\"b\":1}",
+    "hash": "c0bf82ad036cb0a5a03d6759c1b7b8b1f70a39b32dd96ed3977c7f2831ee3b56"
+  },
+  {
+    "label": "bmp non-ascii keys",
+    "payload": {
+      "é": 1,
+      "中": 2,
+      "a": 3
+    },
+    "canonical": "{\"a\":3,\"é\":1,\"中\":2}",
+    "hash": "30b2729695b7c5ad9d57e9cbbb17e3cb1feef24360842231e9593c3d2c94fe67"
+  },
+  {
+    "label": "astral key beside bmp",
+    "payload": {
+      "a": 1,
+      "😀": "astral",
+      "！": "bmp"
+    },
+    "canonical": "{\"a\":1,\"😀\":\"astral\",\"！\":\"bmp\"}",
+    "hash": "03b0961b449b0349890fbcb8ec62886006ded6272f75fcd92d2698af1ba7c297"
+  },
+  {
+    "label": "astral nested",
+    "payload": {
+      "outer": {
+        "🚀": 1,
+        "m": 3
+      },
+      "😀": 4
+    },
+    "canonical": "{\"outer\":{\"m\":3,\"🚀\":1},\"😀\":4}",
+    "hash": "14ad351318a0dd6f307ab3ea2e2f70a068be61269da3661733b601a82d260fac"
+  },
+  {
+    "label": "floats and integers",
+    "payload": {
+      "i": 42,
+      "f": 1.5,
+      "neg": -0.25,
+      "big": 1e+21
+    },
+    "canonical": "{\"big\":1e+21,\"f\":1.5,\"i\":42,\"neg\":-0.25}",
+    "hash": "7e2be07541bc645edabb941bf1676d9afa0c85c4d8762b8e7b28f75873af51d8"
+  },
+  {
+    "label": "empty containers",
+    "payload": {
+      "arr": [],
+      "obj": {},
+      "s": ""
+    },
+    "canonical": "{\"arr\":[],\"obj\":{},\"s\":\"\"}",
+    "hash": "cb21fb26e9762b2ad84481ae53d34c4d8082d0a756ee9f7afcd22d0617430a31"
+  },
+  {
+    "label": "booleans",
+    "payload": {
+      "t": true,
+      "f": false
+    },
+    "canonical": "{\"f\":false,\"t\":true}",
+    "hash": "c22848c47426fcf4d27e55573c22f1d23546315c251e8e4bc384820ba5fae568"
+  }
+]
