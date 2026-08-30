@@ -18,7 +18,7 @@
   "homepage": "https://darkmatterhub.ai",
   "repository": {
     "type": "git",
-    "url": "https://github.com/darkmatter-hub/darkmatter-sdk-js"
+    "url": "git+https://github.com/darkmatter-hub/darkmatter-sdk-js.git"
   },
   "bugs": {
     "url": "https://github.com/darkmatter-hub/darkmatter-sdk-js/issues"
