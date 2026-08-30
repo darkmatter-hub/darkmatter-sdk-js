@@ -23,9 +23,26 @@ const path    = require('node:path');
 const { canonicalize, hashPayload } = require('./src/index.js');
 
 let passed = 0, failed = 0;
+const pending = [];
+
+// A test may return a promise. The first version of check() ignored that and
+// printed ok before the assertions inside had run, so tests passed with the
+// feature they covered switched off. Anything returned is awaited before the
+// summary.
 function check(label, fn) {
-  try { fn(); console.log('  ok    ' + label); passed++; }
-  catch (e) { console.error('  FAIL  ' + label + '\n          ' + e.message); failed++; }
+  try {
+    const out = fn();
+    if (out && typeof out.then === 'function') {
+      pending.push(out.then(
+        function () { console.log('  ok    ' + label); passed++; },
+        function (e) { console.error('  FAIL  ' + label + String.fromCharCode(10) + '          ' + e.message); failed++; }
+      ));
+      return;
+    }
+    console.log('  ok    ' + label); passed++;
+  } catch (e) {
+    console.error('  FAIL  ' + label + String.fromCharCode(10) + '          ' + e.message); failed++;
+  }
 }
 
 console.log('\nCanonicalization matches the server');
@@ -90,5 +107,55 @@ check('both commit builders include payload_hash', () => {
     'buildCommitBody must set payload_hash from hashPayload');
 });
 
-console.log('\nPassed: ' + passed + '  Failed: ' + failed);
-process.exit(failed ? 1 : 0);
+console.log('');
+console.log('Call shapes the documentation teaches');
+
+check('commit accepts an options object', () => {
+  // The quickstart taught commit({ payload, parentId }) while the SDK only
+  // took positional arguments, so the example passed the options object as
+  // toAgentId, left payload undefined, and threw inside canonicalize.
+  var seen = null;
+  var realFetch = global.fetch;
+  global.fetch = async function (u, o) {
+    seen = JSON.parse(o.body);
+    return { ok: true, status: 200, json: async function () { return { id: 'ctx_x' }; } };
+  };
+  process.env.DARKMATTER_API_KEY = process.env.DARKMATTER_API_KEY || 'test';
+  return require('./src/index.js')
+    .commit({ payload: { a: 1 }, parentId: 'ctx_p' })
+    .then(function () {
+      global.fetch = realFetch;
+      assert.deepStrictEqual(seen.payload, { a: 1 });
+      assert.strictEqual(seen.parentId, 'ctx_p');
+      assert.ok(seen.payload_hash, 'the object form must still hash the payload');
+    });
+});
+
+check('the positional form still works', () => {
+  var seen = null;
+  var realFetch = global.fetch;
+  global.fetch = async function (u, o) {
+    seen = JSON.parse(o.body);
+    return { ok: true, status: 200, json: async function () { return { id: 'ctx_x' }; } };
+  };
+  return require('./src/index.js')
+    .commit(undefined, { a: 1 }, { parentId: 'ctx_p' })
+    .then(function () {
+      global.fetch = realFetch;
+      assert.deepStrictEqual(seen.payload, { a: 1 });
+      assert.strictEqual(seen.parentId, 'ctx_p');
+    });
+});
+
+check('bundle is exported', () => {
+  // `import { export }` is a syntax error, so the docs named bundle, which the
+  // Python SDK also calls it. Both hit /api/export.
+  var m = require('./src/index.js');
+  assert.strictEqual(typeof m.bundle, 'function');
+  assert.strictEqual(m.bundle, m.export);
+});
+
+Promise.all(pending).then(function () {
+  console.log('\nPassed: ' + passed + '  Failed: ' + failed);
+  process.exit(failed ? 1 : 0);
+});

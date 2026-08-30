@@ -1,5 +1,5 @@
 /**
- * DarkMatter JavaScript SDK v1.4.2
+ * DarkMatter JavaScript SDK v1.4.3
  * Replay, fork, and verify any AI workflow.
  * npm install darkmatter-js
  *
@@ -151,7 +151,25 @@ async function _req(method, path, body, key, base) {
  * @param {object} opts - { parentId, traceId, branchKey, eventType, agent }
  * @returns {Promise<object>} Context Passport
  */
+/**
+ * commit(toAgentId, payload, opts) or commit({ payload, parentId, ... }).
+ *
+ * The documentation taught the object form and the SDK only accepted the
+ * positional one, so the example in the quickstart passed the options object
+ * as toAgentId, left payload undefined, and threw inside the canonicaliser.
+ * Both forms work now; the positional one is unchanged for existing callers.
+ */
+function _commitArgs(toAgentId, payload, opts) {
+  if (toAgentId && typeof toAgentId === 'object' && !payload) {
+    const o = toAgentId;
+    const { payload: p, toAgentId: to, ...rest } = o;
+    return [to, p, rest];
+  }
+  return [toAgentId, payload, opts || {}];
+}
+
 async function commit(toAgentId, payload, opts = {}) {
+  [toAgentId, payload, opts] = _commitArgs(toAgentId, payload, opts);
   const resolvedTo = toAgentId || process.env.DARKMATTER_AGENT_ID;
   const body = buildCommitBody(resolvedTo, payload, opts);
   return _req('POST', '/api/commit', body);
@@ -250,6 +268,7 @@ class DarkMatter {
   }
 
   commit(toAgentId, payload, opts = {}) {
+    [toAgentId, payload, opts] = _commitArgs(toAgentId, payload, opts);
     const resolvedTo = toAgentId || process.env.DARKMATTER_AGENT_ID;
     return this._req('POST', '/api/commit', buildCommitBody(resolvedTo, payload, opts));
   }
@@ -461,6 +480,10 @@ module.exports = {
   configure,
   commit, pull, replay, fork, verify,
   export: exportChain,
+  // `import { export }` is a syntax error, so the docs reached for a name that
+  // did not exist. bundle is what the Python SDK calls it and hits the same
+  // endpoint.
+  bundle: exportChain,
   search, diff, me,
   // Exported so a caller can recompute what we sent and check it themselves,
   // and so the cross-implementation test can compare against the server.
