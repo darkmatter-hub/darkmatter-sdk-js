@@ -106,6 +106,12 @@ function buildCommitBody(resolvedTo, payload, opts) {
   if (opts.traceId)   body.traceId   = opts.traceId;
   if (opts.branchKey) body.branchKey = opts.branchKey;
   if (opts.agent)     body.agent     = opts.agent;
+  // Records are private and /r/<id> is gated on a share row, so the verify_url
+  // in the receipt returns 404 to everyone else until this is set. Neither SDK
+  // could set it, which meant the proof link the quickstart tells you to print
+  // and send could never resolve for the person you sent it to. The receipt's
+  // verify_public says which you got.
+  if (opts.share === true) body.share = true;
   return body;
 }
 

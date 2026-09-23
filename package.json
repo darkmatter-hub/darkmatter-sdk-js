@@ -1,6 +1,6 @@
 {
   "name": "darkmatter-js",
-  "version": "1.4.3",
+  "version": "1.4.4",
   "description": "Replay, fork, and verify any AI workflow. Execution record for AI agent pipelines.",
   "main": "src/index.js",
   "exports": {
@@ -10,8 +10,20 @@
     "test": "node test.js"
   },
   "keywords": [
-    "ai", "agents", "llm", "execution", "record", "replay", "fork", "verify",
-    "lineage", "audit", "anthropic", "openai", "langgraph", "context-passport"
+    "ai",
+    "agents",
+    "llm",
+    "execution",
+    "record",
+    "replay",
+    "fork",
+    "verify",
+    "lineage",
+    "audit",
+    "anthropic",
+    "openai",
+    "langgraph",
+    "context-passport"
   ],
   "author": "DarkMatter <hello@darkmatterhub.ai>",
   "license": "MIT",
@@ -31,7 +43,11 @@
     "openai": ">=4.0.0"
   },
   "peerDependenciesMeta": {
-    "@anthropic-ai/sdk": { "optional": true },
-    "openai": { "optional": true }
+    "@anthropic-ai/sdk": {
+      "optional": true
+    },
+    "openai": {
+      "optional": true
+    }
   }
 }
